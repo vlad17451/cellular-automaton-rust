@@ -9,32 +9,165 @@ struct Cell;
 #[derive(Resource)]
 struct CircleTimer(Timer);
 
+#[derive(Component)]
+enum ButtonAction {
+    DecriceSpeed,
+    IncriceSpeed,
+    TogglePause,
+}
 
-// TODO show current speed and age
-// TODO implement logic of buttons
+#[derive(Component, Debug)]
+struct AgeDurationIndicator;
+
+#[derive(Component, Debug)]
+enum Icon {
+    Play,
+    Pause
+}
+
 // TODO implement drawing
 
-const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
+#[derive(Resource, Default)]
+struct Age(i32);
+
+
+#[derive(Resource, Default)]
+struct IsPaused(bool);
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .init_resource::<Age>()
+        .init_resource::<IsPaused>()
         .insert_resource(CircleTimer(Timer::from_seconds(
             0.1,
             TimerMode::Repeating,
         )))
         .add_systems(Startup, setup)
         .add_systems(Startup, setup_buttons)
-        .add_systems(Update, update)
-        .add_systems(Update, button_system)
-        .add_systems(Update, metadata_system)
+        .add_systems(FixedUpdate, update)
+        .add_systems(FixedUpdate, button_system)
+        .add_systems(FixedUpdate, button_action)
+        .add_systems(FixedUpdate, scoreboard_system)
+        .add_systems(FixedUpdate, pause_button_system)
         .run();
 }
 
-fn metadata_system(
+fn scoreboard_system(
+    mut query: Query<&mut Text, With<AgeDurationIndicator>>,
+    timer: Res<CircleTimer>,
+    age: Res<Age>
 
 ) {
-    
+    if !timer.is_changed() && !age.is_changed() {
+        print!("skip\n");
+        return;
+    }
+    let mut text = query.single_mut();
+    text.sections[0].value = format!("Speed: {}, Age: {}", timer.0.duration().as_millis(), age.0);
+}
+
+fn setup_buttons(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>
+) {
+
+    let button_icon_style = Style {
+        width: Val::Px(30.0),
+        display: Display::None,
+        ..default()
+    };
+
+    let button_bundle = ButtonBundle {
+        style: Style {
+            width: Val::Px(65.0),
+            height: Val::Px(65.0),
+            border: UiRect::all(Val::Px(5.0)),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            margin: UiRect::all(Val::Px(5.0)),
+            ..default()
+        },
+        border_color: BorderColor(Color::BLACK),
+        background_color: Color::rgb(0.15, 0.15, 0.15).into(),
+        ..default()
+    };
+
+    let text_style = TextStyle {
+        font: asset_server.load("fonts/FiraSans-Medium.ttf"),
+        font_size: 40.0,
+        color: Color::WHITE,
+    };
+
+    let container = NodeBundle {
+        style: Style {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            align_items: AlignItems::End,
+            padding: UiRect::bottom(Val::Px(40.0)),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        ..default()
+    };
+
+    let play_button_icon = (
+        ImageBundle {
+            style: button_icon_style.clone(),
+            image: UiImage::new(asset_server.load("icons/play.png")),
+            ..default()
+        },
+        Icon::Play
+    );
+
+    let pause_button_icon = (
+        ImageBundle {
+            style: button_icon_style.clone(),
+            image: UiImage::new(asset_server.load("icons/pause.png")),
+            ..default()
+        },
+        Icon::Pause
+    );
+
+    let decrice_speed_button = (
+        button_bundle.clone(),
+        ButtonAction::DecriceSpeed,
+    );
+    let decrice_speed_text = TextBundle::from_section("-", text_style.clone());
+
+
+    let toggle_pause_button = (
+        button_bundle.clone(),
+        ButtonAction::TogglePause,
+    );
+
+    let incrice_speed_button = (
+        button_bundle.clone(),
+        ButtonAction::IncriceSpeed,
+    );
+
+    let incrice_speed_text = TextBundle::from_section("+", text_style.clone());
+
+    commands
+        .spawn(container)
+        .with_children(|parent| {
+             parent
+                .spawn(decrice_speed_button)
+                .with_children(|parent| {
+                    parent.spawn(decrice_speed_text);
+                });
+            parent
+                .spawn(toggle_pause_button)
+                .with_children(|parent| {
+                    parent.spawn(pause_button_icon);
+                    parent.spawn(play_button_icon);
+                });
+            parent
+                .spawn(incrice_speed_button)
+                .with_children(|parent| {
+                    parent.spawn(incrice_speed_text);
+                });
+        });
 }
 
 fn button_system(
@@ -47,7 +180,6 @@ fn button_system(
         match *interaction {
             Interaction::Pressed => {
                 border_color.0 = Color::SILVER;
-
             }
             Interaction::Hovered => {
                 border_color.0 = Color::rgb(0.25, 0.25, 0.25);
@@ -59,94 +191,119 @@ fn button_system(
     }
 }
 
-fn setup_buttons(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>
+fn pause_button_system(
+    is_paused: Res<IsPaused>,
+    mut icons_query: Query<(&Icon, &mut Style)>
 ) {
+    if !is_paused.is_changed() {
+        return;
+    }
+    for (icon, mut style) in icons_query.iter_mut() {
+        if is_paused.0 {
+            match icon {
+                Icon::Play => {
+                    style.display = Display::Flex;
+                },
+                Icon::Pause => {
+                    style.display = Display::None;
+                }
+            }
+        } else {
+            match icon {
+                Icon::Play => {
+                    style.display = Display::None;
+                },
+                Icon::Pause => {
+                    style.display = Display::Flex;
+                }
+            }
+        }
 
-    let button_icon_style = Style {
-        width: Val::Px(30.0),
-        ..default()
-    };
+    }
+}
 
-    let btn_bundle = ButtonBundle {
-        style: Style {
-            width: Val::Px(65.0),
-            height: Val::Px(65.0),
-            border: UiRect::all(Val::Px(5.0)),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            margin: UiRect::all(Val::Px(5.0)),
-            ..default()
-        },
-        border_color: BorderColor(Color::BLACK),
-        background_color: NORMAL_BUTTON.into(),
-        ..default()
-    };
 
-    let text_style = TextStyle {
-        font: asset_server.load("fonts/FiraSans-Medium.ttf"),
-        font_size: 40.0,
-        color: Color::WHITE,
-    };
+const MIN_AGE_DURATION: f32 = 0.01;
+const MAX_AGE_DURATION: f32 = 10.;
 
-    commands
-        .spawn(NodeBundle {
-            style: Style {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                align_items: AlignItems::End,
-                padding: UiRect::bottom(Val::Px(40.0)),
-                justify_content: JustifyContent::Center,
-                ..default()
+fn get_decreased_speed(speed: f32) -> f32 {
+    let new_speed = speed * 2.;
+    if new_speed > MAX_AGE_DURATION {
+        return MAX_AGE_DURATION
+    }
+    new_speed
+}
+
+fn get_increased_speed(speed: f32) -> f32 {
+    let new_speed = speed * 0.5;
+    if new_speed < MIN_AGE_DURATION {
+        return MIN_AGE_DURATION
+    }
+    new_speed
+}
+
+fn button_action(
+    interaction_query: Query<
+        (&Interaction, &ButtonAction),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut timer: ResMut<CircleTimer>,
+    mut is_paused: ResMut<IsPaused>
+) {
+    for (interaction, menu_button_action) in &interaction_query {
+        if *interaction != Interaction::Pressed {
+           continue;
+        }
+        match menu_button_action {
+            ButtonAction::IncriceSpeed => {
+                timer.0 = Timer::from_seconds(
+                    get_increased_speed(timer.0.duration().as_secs_f32()),
+                    TimerMode::Repeating,
+                );
             },
-            ..default()
-        })
-        .with_children(|parent| {
-            parent
-                .spawn(NodeBundle::default())
-                .with_children(|parent| {
-                    // spawn "-" dutton
-                    parent
-                        .spawn(btn_bundle.clone())
-                        .with_children(|parent| {
-                            parent.spawn(TextBundle::from_section("-", text_style.clone() ));
-                        });
-                    // spawn "pause" dutton
-                    parent
-                        .spawn(btn_bundle.clone())
-                        .with_children(|parent| {
-                            let icon = asset_server.load("icons/pause.png");
-                            parent.spawn(ImageBundle {
-                                style: button_icon_style.clone(),
-                                image: UiImage::new(icon),
-                                ..default()
-                            });
-                        });
-                    // spawn "+" dutton
-                    parent
-                        .spawn(btn_bundle.clone())
-                        .with_children(|parent| {
-                            parent.spawn(TextBundle::from_section("+", text_style.clone() ));
-                        });
-                });
-        });
+            ButtonAction::DecriceSpeed => {
+                timer.0 = Timer::from_seconds(
+                    get_decreased_speed(timer.0.duration().as_secs_f32()),
+                    TimerMode::Repeating,
+                );
+            },
+            ButtonAction::TogglePause => {
+                is_paused.0 = !is_paused.0;
+            },
+        }
+    }
 }
 
 fn setup(
-    mut commands: Commands
+    mut commands: Commands,
+    mut is_paused: ResMut<IsPaused>,
+    mut age: ResMut<Age>
 ) {
+    age.0 = 0;
+    is_paused.0 = false;
     commands.spawn(Camera2dBundle::default());
-    
+    commands.spawn((
+        TextBundle::from_section(
+            "",
+            TextStyle {
+                font_size: 40.0,
+                color: Color::WHITE,
+                ..default()
+            },
+        ),
+        AgeDurationIndicator
+    ));
+
+
     let cells = vec![
         vec![1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
         vec![1, 0, 0, 0, 0, 0, 1, 1, 0, 0],
         vec![0, 1, 0, 1, 0, 0, 0, 0, 1, 0],
         vec![0, 0, 0, 0, 1, 0, 1, 1, 1, 0],
-        vec![0, 0, 0, 0, 0, 1, 1, 0, 1, 0],
-        vec![0, 0, 0, 0, 1, 0, 0, 1, 0, 1],
-        vec![0, 0, 0, 0, 0, 1, 1, 0, 0, 0],
-        vec![0, 0, 0, 0, 0, 1, 0, 1, 0, 0],
+        vec![0, 0, 1, 0, 0, 1, 1, 0, 1, 0],
+        vec![0, 0, 1, 0, 1, 0, 0, 1, 0, 1],
+        vec![0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+        vec![0, 0, 0, 1, 0, 1, 0, 1, 0, 0],
         vec![0, 0, 0, 0, 0, 0, 1, 1, 0, 0],
         vec![0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
     ];
@@ -190,11 +347,18 @@ fn update(
     query: Query<(Entity, &Transform), With<Cell>>,
     time: Res<Time>,
     mut timer: ResMut<CircleTimer>,
+    is_paused: Res<IsPaused>,
+    mut age: ResMut<Age>
 ) {
+    
+    if is_paused.0 {
+        return;
+    }
+
     if !timer.0.tick(time.delta()).finished() {
         return;
     }
-    // println!("----------------------");
+    age.0 += 1;
 
     let cells = query.iter().map(|(_entity, transform)| {
         let x = transform.translation.x;
@@ -212,11 +376,10 @@ fn update(
         let (x_str, y_str) = key.split_once("#").unwrap();
         let x: i32 = x_str.parse().unwrap();
         let y: i32 = y_str.parse().unwrap();
-        // println!("{}, {}", x, y);
 
         let mut neighbours_count = 0;
-        for i in -1..2 { // for x
-            for j in -1..2 { // for y
+        for i in -1..2 {
+            for j in -1..2 {
                 if i == 0 && j == 0 {
                     continue;
                 }
@@ -229,8 +392,8 @@ fn update(
                 
                 let mut sub_neighbours_count = 0;
 
-                for i in -1..2 { // for x2
-                    for j in -1..2 { // for y2
+                for i in -1..2 {
+                    for j in -1..2 {
                         if i == 0 && j == 0 {
                             continue;
                         }
@@ -257,7 +420,3 @@ fn update(
         }
     }
 }
-
-// TODO pause button
-// TODO loop speed setting
-// TODO draw option

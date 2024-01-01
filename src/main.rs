@@ -5,7 +5,6 @@ use bevy::prelude::*;
 #[derive(Component, Debug)]
 struct Cell;
 
-
 #[derive(Resource)]
 struct CircleTimer(Timer);
 
@@ -25,11 +24,8 @@ enum Icon {
     Pause
 }
 
-// TODO implement drawing
-
 #[derive(Resource, Default)]
 struct Age(i32);
-
 
 #[derive(Resource, Default)]
 struct IsPaused(bool);
@@ -43,28 +39,55 @@ fn main() {
             0.1,
             TimerMode::Repeating,
         )))
-        .add_systems(Startup, setup)
+        .add_systems(Startup, setup)        
         .add_systems(Startup, setup_buttons)
-        .add_systems(FixedUpdate, update)
+        .add_systems(FixedUpdate, check_cells)
+        .add_systems(PostUpdate, remove_duplicates)
         .add_systems(FixedUpdate, button_system)
         .add_systems(FixedUpdate, button_action)
         .add_systems(FixedUpdate, scoreboard_system)
         .add_systems(FixedUpdate, pause_button_system)
+        .add_systems(Update, draw_cursor)
         .run();
+}
+
+fn draw_cursor(
+    camera_query: Query<(&Camera, &GlobalTransform)>,
+    windows: Query<&Window>,
+    buttons: Res<Input<MouseButton>>,
+    mut commands: Commands
+) {
+    let (camera, camera_transform) = camera_query.single();
+
+    let Some(cursor_position) = windows.single().cursor_position() else {
+        return;
+    };
+
+    let Some(point) = camera.viewport_to_world_2d(camera_transform, cursor_position) else {
+        return;
+    };
+
+    // TODO skip if ui button pressed
+    // TODO fix prision
+
+    if buttons.pressed(MouseButton::Left) {
+        let x = (point.x as f32 / CELL_SIZE) as i32;
+        let y = (point.y as f32 / CELL_SIZE) as i32;
+        spawn_cell(&mut commands, x, y);
+    }
 }
 
 fn scoreboard_system(
     mut query: Query<&mut Text, With<AgeDurationIndicator>>,
     timer: Res<CircleTimer>,
-    age: Res<Age>
-
+    age: Res<Age>,
+    cells: Query<&Cell>
 ) {
     if !timer.is_changed() && !age.is_changed() {
-        print!("skip\n");
         return;
     }
     let mut text = query.single_mut();
-    text.sections[0].value = format!("Speed: {}, Age: {}", timer.0.duration().as_millis(), age.0);
+    text.sections[0].value = format!("Speed: {}, Age: {}, Cells: {}", timer.0.duration().as_millis(), age.0, cells.iter().count());
 }
 
 fn setup_buttons(
@@ -222,9 +245,9 @@ fn pause_button_system(
     }
 }
 
-
 const MIN_AGE_DURATION: f32 = 0.01;
 const MAX_AGE_DURATION: f32 = 10.;
+const WORLD_EDGE: f32 = 400.;
 
 fn get_decreased_speed(speed: f32) -> f32 {
     let new_speed = speed * 2.;
@@ -318,13 +341,18 @@ fn setup(
     
 }
 
-const CELL_SIZE: f32 = 10.;
+const CELL_SIZE: f32 = 6.;
 
 fn spawn_cell(
     commands: &mut Commands,
     x: i32,
     y: i32,
 ) {
+    // if module of x or y is more than WORLD_EDGE / CELL_SIZE - skip
+    if x.abs() > WORLD_EDGE as i32 / CELL_SIZE as i32 || y.abs() > WORLD_EDGE as i32 / CELL_SIZE as i32 {
+        return;
+    }
+    
     commands.spawn((
         SpriteBundle {
             sprite: Sprite {
@@ -342,7 +370,7 @@ fn spawn_cell(
     ));
 }
 
-fn update(
+fn check_cells(
     mut commands: Commands,
     query: Query<(Entity, &Transform), With<Cell>>,
     time: Res<Time>,
@@ -366,13 +394,14 @@ fn update(
         (x, y)
     });
 
-    let mut cell_map: HashMap<String, bool> = HashMap::new();
+    let mut old_cell_map: HashMap<String, bool> = HashMap::new();
+    let mut new_cell_map: HashMap<String, bool> = HashMap::new();
 
     for (x, y) in cells {
-        cell_map.insert(format!("{}#{}", x, y), true);
+        old_cell_map.insert(format!("{}#{}", x, y), true);
     }
 
-    for (key, _value) in cell_map.iter() {
+    for (key, _value) in old_cell_map.iter() {
         let (x_str, y_str) = key.split_once("#").unwrap();
         let x: i32 = x_str.parse().unwrap();
         let y: i32 = y_str.parse().unwrap();
@@ -385,11 +414,17 @@ fn update(
                 }
                 let x2 = x as f32 + (i as f32 * CELL_SIZE);
                 let y2 = y as f32 + (j as f32 * CELL_SIZE);
-                let is_alive = cell_map.get(&format!("{}#{}", x2, y2));
+                let is_alive = old_cell_map.get(&format!("{}#{}", x2, y2));
                 if is_alive == Some(&true) {
                     neighbours_count += 1;
+                    continue;
                 }
                 
+                let is_already_spawned = new_cell_map.get(&format!("{}#{}", x2 * CELL_SIZE, y2 * CELL_SIZE));
+                if is_already_spawned == Some(&true) {
+                    continue;
+                }
+
                 let mut sub_neighbours_count = 0;
 
                 for i in -1..2 {
@@ -399,7 +434,7 @@ fn update(
                         }
                         let x3 = x2 + (i as f32 * CELL_SIZE);
                         let y3 = y2 + (j as f32 * CELL_SIZE);
-                        let is_alive = cell_map.get(&format!("{}#{}", x3, y3));
+                        let is_alive = old_cell_map.get(&format!("{}#{}", x3, y3));
                         if is_alive == Some(&true) {
                             sub_neighbours_count += 1;
                         }
@@ -407,6 +442,7 @@ fn update(
                 }
                 if sub_neighbours_count == 3 {
                     spawn_cell(&mut commands, (x2 / CELL_SIZE) as i32, (y2 / CELL_SIZE) as i32);
+                    new_cell_map.insert(format!("{}#{}", (x2 * CELL_SIZE) as i32, (y2 * CELL_SIZE) as i32), true);
                 }
             }
         }
@@ -417,6 +453,24 @@ fn update(
                     commands.entity(entity).despawn_recursive();
                 }
             }
+        }
+    }
+}
+
+fn remove_duplicates(
+    query: Query<(Entity, &Transform), With<Cell>>,
+    mut commands: Commands,
+) {
+    let mut cell_map: HashMap<String, bool> = HashMap::new();
+
+    for (entity, transform) in query.iter() {
+        let x = transform.translation.x;
+        let y = transform.translation.y;
+        let key = format!("{}#{}", x, y);
+        if cell_map.contains_key(&key) {
+            commands.entity(entity).despawn_recursive();
+        } else {
+            cell_map.insert(key, true);
         }
     }
 }

@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
+use bevy_pancam::{PanCam, PanCamPlugin};
+
 
 #[derive(Component, Debug)]
 struct Cell;
 
-#[derive(Resource)]
-struct CircleTimer(Timer);
+
 
 #[derive(Component)]
 enum ButtonAction {
@@ -24,18 +25,27 @@ enum Icon {
     Pause
 }
 
+#[derive(Resource)]
+struct AgeTimer(Timer);
+
 #[derive(Resource, Default)]
 struct Age(i32);
 
 #[derive(Resource, Default)]
 struct IsPaused(bool);
 
+const CELL_SIZE: i32 = 1;
+const MIN_AGE_DURATION: f32 = 0.01;
+const MAX_AGE_DURATION: f32 = 10.;
+const WORLD_EDGE: i32 = 4000;
+
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        // .add_plugins(DefaultPlugins)
+        .add_plugins((DefaultPlugins, PanCamPlugin::default()))
         .init_resource::<Age>()
         .init_resource::<IsPaused>()
-        .insert_resource(CircleTimer(Timer::from_seconds(
+        .insert_resource(AgeTimer(Timer::from_seconds(
             0.1,
             TimerMode::Repeating,
         )))
@@ -67,19 +77,26 @@ fn draw_cursor(
         return;
     };
 
+    
     // TODO skip if ui button pressed
     // TODO fix prision
 
+    // TODO remove CELL_SIZE, use pixels instead
+    // TODO add circle to show when age will be updated
+    // TODO add keyboard shortcuts
+    // TODO add reset button
+
     if buttons.pressed(MouseButton::Left) {
-        let x = (point.x as f32 / CELL_SIZE) as i32;
-        let y = (point.y as f32 / CELL_SIZE) as i32;
+        // x = Math.floor(point.x / CELL_SIZE) * CELL_SIZE;
+        let x = ((point.x - CELL_SIZE as f32 / 2.) / CELL_SIZE as f32).ceil() as i32 * CELL_SIZE;
+        let y = ((point.y - CELL_SIZE as f32 / 2.) / CELL_SIZE as f32).ceil() as i32 * CELL_SIZE;
         spawn_cell(&mut commands, x, y);
     }
 }
 
 fn scoreboard_system(
     mut query: Query<&mut Text, With<AgeDurationIndicator>>,
-    timer: Res<CircleTimer>,
+    timer: Res<AgeTimer>,
     age: Res<Age>,
     cells: Query<&Cell>
 ) {
@@ -245,9 +262,7 @@ fn pause_button_system(
     }
 }
 
-const MIN_AGE_DURATION: f32 = 0.01;
-const MAX_AGE_DURATION: f32 = 10.;
-const WORLD_EDGE: f32 = 400.;
+
 
 fn get_decreased_speed(speed: f32) -> f32 {
     let new_speed = speed * 2.;
@@ -270,7 +285,7 @@ fn button_action(
         (&Interaction, &ButtonAction),
         (Changed<Interaction>, With<Button>),
     >,
-    mut timer: ResMut<CircleTimer>,
+    mut timer: ResMut<AgeTimer>,
     mut is_paused: ResMut<IsPaused>
 ) {
     for (interaction, menu_button_action) in &interaction_query {
@@ -304,7 +319,19 @@ fn setup(
 ) {
     age.0 = 0;
     is_paused.0 = false;
-    commands.spawn(Camera2dBundle::default());
+
+
+    // commands.spawn(Camera2dBundle::default());
+    commands.spawn((
+        Camera2dBundle::default(),
+        PanCam {
+            grab_buttons: vec![MouseButton::Right, MouseButton::Middle],
+            ..default()
+        }
+    ));
+
+
+
     commands.spawn((
         TextBundle::from_section(
             "",
@@ -334,22 +361,20 @@ fn setup(
     for (y, row) in cells.iter().enumerate() {
         for (x, &cell) in row.iter().enumerate() {
             if cell == 1 {
-                spawn_cell(&mut commands, x as i32, y as i32);
+                spawn_cell(&mut commands, x as i32 * CELL_SIZE as i32, y as i32 * CELL_SIZE as i32);
             }
         }
     }
     
 }
 
-const CELL_SIZE: f32 = 6.;
 
 fn spawn_cell(
     commands: &mut Commands,
     x: i32,
     y: i32,
 ) {
-    // if module of x or y is more than WORLD_EDGE / CELL_SIZE - skip
-    if x.abs() > WORLD_EDGE as i32 / CELL_SIZE as i32 || y.abs() > WORLD_EDGE as i32 / CELL_SIZE as i32 {
+    if x.abs() > WORLD_EDGE || y.abs() > WORLD_EDGE {
         return;
     }
     
@@ -360,8 +385,8 @@ fn spawn_cell(
                 ..default()
             },
             transform: Transform {
-                translation: Vec3::new(x as f32 * CELL_SIZE, y as f32 * CELL_SIZE, 0.),
-                scale: Vec3::new(CELL_SIZE, CELL_SIZE, 1.),
+                translation: Vec3::new(x as f32 , y as f32, 0.),
+                scale: Vec3::new(CELL_SIZE as f32, CELL_SIZE as f32, 1.),
                 ..default()
             },
             ..default()
@@ -374,7 +399,7 @@ fn check_cells(
     mut commands: Commands,
     query: Query<(Entity, &Transform), With<Cell>>,
     time: Res<Time>,
-    mut timer: ResMut<CircleTimer>,
+    mut timer: ResMut<AgeTimer>,
     is_paused: Res<IsPaused>,
     mut age: ResMut<Age>
 ) {
@@ -412,8 +437,8 @@ fn check_cells(
                 if i == 0 && j == 0 {
                     continue;
                 }
-                let x2 = x as f32 + (i as f32 * CELL_SIZE);
-                let y2 = y as f32 + (j as f32 * CELL_SIZE);
+                let x2 = x + (i * CELL_SIZE);
+                let y2 = y + (j * CELL_SIZE);
                 let is_alive = old_cell_map.get(&format!("{}#{}", x2, y2));
                 if is_alive == Some(&true) {
                     neighbours_count += 1;
@@ -432,8 +457,8 @@ fn check_cells(
                         if i == 0 && j == 0 {
                             continue;
                         }
-                        let x3 = x2 + (i as f32 * CELL_SIZE);
-                        let y3 = y2 + (j as f32 * CELL_SIZE);
+                        let x3 = x2 + (i * CELL_SIZE);
+                        let y3 = y2 + (j * CELL_SIZE);
                         let is_alive = old_cell_map.get(&format!("{}#{}", x3, y3));
                         if is_alive == Some(&true) {
                             sub_neighbours_count += 1;
@@ -441,7 +466,7 @@ fn check_cells(
                     }
                 }
                 if sub_neighbours_count == 3 {
-                    spawn_cell(&mut commands, (x2 / CELL_SIZE) as i32, (y2 / CELL_SIZE) as i32);
+                    spawn_cell(&mut commands, x2 as i32, y2 as i32);
                     new_cell_map.insert(format!("{}#{}", (x2 * CELL_SIZE) as i32, (y2 * CELL_SIZE) as i32), true);
                 }
             }
@@ -467,7 +492,8 @@ fn remove_duplicates(
         let x = transform.translation.x;
         let y = transform.translation.y;
         let key = format!("{}#{}", x, y);
-        if cell_map.contains_key(&key) {
+        let does_exist = cell_map.get(&key);
+        if does_exist == Some(&true) {
             commands.entity(entity).despawn_recursive();
         } else {
             cell_map.insert(key, true);

@@ -14,6 +14,7 @@ enum ButtonAction {
     DecriceSpeed,
     IncriceSpeed,
     TogglePause,
+    Reset,
 }
 
 #[derive(Component, Debug)]
@@ -34,14 +35,28 @@ struct Age(i32);
 #[derive(Resource, Default)]
 struct IsPaused(bool);
 
-const CELL_SIZE: i32 = 1;
+// #[derive(Resource)]
+// struct StopPropagation(bool);
+
 const MIN_AGE_DURATION: f32 = 0.01;
 const MAX_AGE_DURATION: f32 = 10.;
 const WORLD_EDGE: i32 = 4000;
 
+const INITIAL_CELLS : [[i32; 10]; 10] = [
+    [1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+    [1, 0, 0, 0, 0, 0, 1, 1, 0, 0],
+    [0, 1, 0, 1, 0, 0, 0, 0, 1, 0],
+    [0, 0, 0, 0, 1, 0, 1, 1, 1, 0],
+    [0, 0, 1, 0, 0, 1, 1, 0, 1, 0],
+    [0, 0, 1, 0, 1, 0, 0, 1, 0, 1],
+    [0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+    [0, 0, 0, 1, 0, 1, 0, 1, 0, 0],
+    [0, 0, 0, 0, 0, 0, 1, 1, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+];
+
 fn main() {
     App::new()
-        // .add_plugins(DefaultPlugins)
         .add_plugins((DefaultPlugins, PanCamPlugin::default()))
         .init_resource::<Age>()
         .init_resource::<IsPaused>()
@@ -51,21 +66,27 @@ fn main() {
         )))
         .add_systems(Startup, setup)        
         .add_systems(Startup, setup_buttons)
-        .add_systems(FixedUpdate, check_cells)
-        .add_systems(PostUpdate, remove_duplicates)
-        .add_systems(FixedUpdate, button_system)
-        .add_systems(FixedUpdate, button_action)
-        .add_systems(FixedUpdate, scoreboard_system)
-        .add_systems(FixedUpdate, pause_button_system)
+        .add_systems(Update, check_cells)
+        .add_systems(Update, button_action)
+        .add_systems(Update, button_system)
+        .add_systems(Update, scoreboard_system)
+        .add_systems(Update, pause_button_system)
         .add_systems(Update, draw_cursor)
+        .add_systems(
+            Update,
+            apply_deferred
+                .before(check_cells)
+                .after(button_action)
+        )
         .run();
 }
 
 fn draw_cursor(
     camera_query: Query<(&Camera, &GlobalTransform)>,
+    cells_query: Query<&Transform, With<Cell>>,
     windows: Query<&Window>,
     buttons: Res<Input<MouseButton>>,
-    mut commands: Commands
+    mut commands: Commands,
 ) {
     let (camera, camera_transform) = camera_query.single();
 
@@ -77,20 +98,22 @@ fn draw_cursor(
         return;
     };
 
-    
-    // TODO skip if ui button pressed
-    // TODO fix prision
-
-    // TODO remove CELL_SIZE, use pixels instead
     // TODO add circle to show when age will be updated
     // TODO add keyboard shortcuts
     // TODO add reset button
 
     if buttons.pressed(MouseButton::Left) {
-        // x = Math.floor(point.x / CELL_SIZE) * CELL_SIZE;
-        let x = ((point.x - CELL_SIZE as f32 / 2.) / CELL_SIZE as f32).ceil() as i32 * CELL_SIZE;
-        let y = ((point.y - CELL_SIZE as f32 / 2.) / CELL_SIZE as f32).ceil() as i32 * CELL_SIZE;
-        spawn_cell(&mut commands, x, y);
+        let new_x = (point.x - 0.5).ceil() as i32;
+        let new_y = (point.y - 0.5).ceil() as i32;
+
+        if cells_query.iter().any(|transform| {
+            let x = transform.translation.x as i32;
+            let y = transform.translation.y as i32;
+            x == new_x && y == new_y
+        }) {
+            return;
+        }
+        spawn_cell(&mut commands, new_x, new_y);
     }
 }
 
@@ -104,7 +127,7 @@ fn scoreboard_system(
         return;
     }
     let mut text = query.single_mut();
-    text.sections[0].value = format!("Speed: {}, Age: {}, Cells: {}", timer.0.duration().as_millis(), age.0, cells.iter().count());
+    text.sections[0].value = format!("Speed: {}ms/age\nAge: {}\nCells: {}", timer.0.duration().as_millis(), age.0, cells.iter().count());
 }
 
 fn setup_buttons(
@@ -139,7 +162,7 @@ fn setup_buttons(
         color: Color::WHITE,
     };
 
-    let container = NodeBundle {
+    let bottom_center_container = NodeBundle {
         style: Style {
             width: Val::Percent(100.0),
             height: Val::Percent(100.0),
@@ -188,8 +211,40 @@ fn setup_buttons(
 
     let incrice_speed_text = TextBundle::from_section("+", text_style.clone());
 
+    let top_right_container = NodeBundle {
+        style: Style {
+            align_items: AlignItems::Start,
+            padding: UiRect::all(Val::Px(10.0)),
+            justify_content: JustifyContent::End,
+            ..bottom_center_container.style.clone()
+        },
+        ..default()
+    };
+
+    let reset_button = (
+        ButtonBundle {
+            style: Style {
+                width: Val::Px(130.0),
+                ..button_bundle.style.clone()
+            },
+            ..button_bundle.clone()
+        }, 
+        ButtonAction::Reset,
+    );
+
+    let reset_text = TextBundle::from_section("Reset", text_style.clone());
+
     commands
-        .spawn(container)
+        .spawn(top_right_container)
+        .with_children(|parent| {
+            parent.spawn(reset_button)
+                .with_children(|parent| {
+                    parent.spawn(reset_text);
+                });
+        });
+
+    commands
+        .spawn(bottom_center_container)
         .with_children(|parent| {
              parent
                 .spawn(decrice_speed_button)
@@ -262,8 +317,6 @@ fn pause_button_system(
     }
 }
 
-
-
 fn get_decreased_speed(speed: f32) -> f32 {
     let new_speed = speed * 2.;
     if new_speed > MAX_AGE_DURATION {
@@ -286,7 +339,9 @@ fn button_action(
         (Changed<Interaction>, With<Button>),
     >,
     mut timer: ResMut<AgeTimer>,
-    mut is_paused: ResMut<IsPaused>
+    mut is_paused: ResMut<IsPaused>,
+    cells_query: Query<Entity, With<Cell>>,
+    mut commands: Commands,
 ) {
     for (interaction, menu_button_action) in &interaction_query {
         if *interaction != Interaction::Pressed {
@@ -308,8 +363,22 @@ fn button_action(
             ButtonAction::TogglePause => {
                 is_paused.0 = !is_paused.0;
             },
+            ButtonAction::Reset => {
+                reset(&cells_query, &mut commands);
+            }
         }
     }
+}
+
+fn reset(
+    cells_query: &Query<Entity, With<Cell>>,
+    commands: &mut Commands,
+) {
+    for entity in cells_query.iter() {
+        // TODO mark cell as dead
+        commands.entity(entity).despawn_recursive();
+    }
+    spawn_initial_cells(commands);
 }
 
 fn setup(
@@ -320,8 +389,6 @@ fn setup(
     age.0 = 0;
     is_paused.0 = false;
 
-
-    // commands.spawn(Camera2dBundle::default());
     commands.spawn((
         Camera2dBundle::default(),
         PanCam {
@@ -329,8 +396,6 @@ fn setup(
             ..default()
         }
     ));
-
-
 
     commands.spawn((
         TextBundle::from_section(
@@ -345,27 +410,19 @@ fn setup(
     ));
 
 
-    let cells = vec![
-        vec![1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-        vec![1, 0, 0, 0, 0, 0, 1, 1, 0, 0],
-        vec![0, 1, 0, 1, 0, 0, 0, 0, 1, 0],
-        vec![0, 0, 0, 0, 1, 0, 1, 1, 1, 0],
-        vec![0, 0, 1, 0, 0, 1, 1, 0, 1, 0],
-        vec![0, 0, 1, 0, 1, 0, 0, 1, 0, 1],
-        vec![0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
-        vec![0, 0, 0, 1, 0, 1, 0, 1, 0, 0],
-        vec![0, 0, 0, 0, 0, 0, 1, 1, 0, 0],
-        vec![0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-    ];
+    spawn_initial_cells(&mut commands);
+}
 
-    for (y, row) in cells.iter().enumerate() {
+fn spawn_initial_cells(
+    commands: &mut Commands,
+) {
+    for (y, row) in INITIAL_CELLS.iter().enumerate() {
         for (x, &cell) in row.iter().enumerate() {
             if cell == 1 {
-                spawn_cell(&mut commands, x as i32 * CELL_SIZE as i32, y as i32 * CELL_SIZE as i32);
+                spawn_cell(commands, x as i32, y as i32);
             }
         }
     }
-    
 }
 
 
@@ -380,15 +437,7 @@ fn spawn_cell(
     
     commands.spawn((
         SpriteBundle {
-            sprite: Sprite {
-                color: Color::WHITE,
-                ..default()
-            },
-            transform: Transform {
-                translation: Vec3::new(x as f32 , y as f32, 0.),
-                scale: Vec3::new(CELL_SIZE as f32, CELL_SIZE as f32, 1.),
-                ..default()
-            },
+            transform: Transform::from_xyz(x as f32, y as f32, 0.),
             ..default()
         },
         Cell,
@@ -437,15 +486,15 @@ fn check_cells(
                 if i == 0 && j == 0 {
                     continue;
                 }
-                let x2 = x + (i * CELL_SIZE);
-                let y2 = y + (j * CELL_SIZE);
+                let x2 = x + i;
+                let y2 = y + j;
                 let is_alive = old_cell_map.get(&format!("{}#{}", x2, y2));
                 if is_alive == Some(&true) {
                     neighbours_count += 1;
                     continue;
                 }
                 
-                let is_already_spawned = new_cell_map.get(&format!("{}#{}", x2 * CELL_SIZE, y2 * CELL_SIZE));
+                let is_already_spawned = new_cell_map.get(&format!("{}#{}", x2, y2));
                 if is_already_spawned == Some(&true) {
                     continue;
                 }
@@ -457,8 +506,8 @@ fn check_cells(
                         if i == 0 && j == 0 {
                             continue;
                         }
-                        let x3 = x2 + (i * CELL_SIZE);
-                        let y3 = y2 + (j * CELL_SIZE);
+                        let x3 = x2 + i;
+                        let y3 = y2 + j;
                         let is_alive = old_cell_map.get(&format!("{}#{}", x3, y3));
                         if is_alive == Some(&true) {
                             sub_neighbours_count += 1;
@@ -467,7 +516,7 @@ fn check_cells(
                 }
                 if sub_neighbours_count == 3 {
                     spawn_cell(&mut commands, x2 as i32, y2 as i32);
-                    new_cell_map.insert(format!("{}#{}", (x2 * CELL_SIZE) as i32, (y2 * CELL_SIZE) as i32), true);
+                    new_cell_map.insert(format!("{}#{}", x2 as i32, y2 as i32), true);
                 }
             }
         }
@@ -478,25 +527,6 @@ fn check_cells(
                     commands.entity(entity).despawn_recursive();
                 }
             }
-        }
-    }
-}
-
-fn remove_duplicates(
-    query: Query<(Entity, &Transform), With<Cell>>,
-    mut commands: Commands,
-) {
-    let mut cell_map: HashMap<String, bool> = HashMap::new();
-
-    for (entity, transform) in query.iter() {
-        let x = transform.translation.x;
-        let y = transform.translation.y;
-        let key = format!("{}#{}", x, y);
-        let does_exist = cell_map.get(&key);
-        if does_exist == Some(&true) {
-            commands.entity(entity).despawn_recursive();
-        } else {
-            cell_map.insert(key, true);
         }
     }
 }

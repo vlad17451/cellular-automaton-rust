@@ -4,6 +4,7 @@ use crate::Age;
 use crate::IsPaused;
 use crate::AgeTimer;
 use crate::cells::Cell;
+use crate::cells::CellMap;
 use crate::cells::reset_cells;
 use crate::slow_age_speed;
 use crate::speed_up_age_speed;
@@ -61,8 +62,7 @@ fn button_action(
     >,
     mut timer: ResMut<AgeTimer>,
     mut is_paused: ResMut<IsPaused>,
-    cells_query: Query<Entity, With<Cell>>,
-    mut commands: Commands,
+    cell_map: ResMut<CellMap>,
 ) {
     for (interaction, menu_button_action) in &interaction_query {
         if *interaction != Interaction::Pressed {
@@ -79,7 +79,8 @@ fn button_action(
                 toggle_pause(&mut is_paused);
             },
             ButtonAction::Reset => {
-                reset_cells(&cells_query, &mut commands);
+                reset_cells(cell_map);
+                return;
             }
         }
     }
@@ -170,7 +171,6 @@ fn setup_progress_bar(mut commands: Commands) {
     let progress_bar = (
         NodeBundle {
             style: Style {
-                // border: UiRect::all(Val::Px(5.0)),
                 width: Val::Percent(35.0),
                 height: Val::Percent(100.0),
                 justify_content: JustifyContent::Start,

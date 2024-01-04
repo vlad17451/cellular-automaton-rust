@@ -20,27 +20,15 @@ pub struct IsPaused(bool);
 // #[derive(Resource)]
 // struct StopPropagation(bool);
 
-// TODO add circle to show when age will be updated
+// TODO generate by perelin noise
 // TODO add keyboard shortcuts
 // TODO space to move camera
 // TODO asset server
+// TODO remove `to_despawn`
 
 pub const MIN_AGE_DURATION: f32 = 0.01;
 pub const MAX_AGE_DURATION: f32 = 10.;
 pub const WORLD_EDGE: i32 = 4000;
-
-pub const INITIAL_CELLS : [[i32; 10]; 10] = [
-    [1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0, 0, 1, 1, 0, 0],
-    [0, 1, 0, 1, 0, 0, 0, 0, 1, 0],
-    [0, 0, 0, 0, 1, 0, 1, 1, 1, 0],
-    [0, 0, 1, 0, 0, 1, 1, 0, 1, 0],
-    [0, 0, 1, 0, 1, 0, 0, 1, 0, 1],
-    [0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
-    [0, 0, 0, 1, 0, 1, 0, 1, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 1, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-];
 
 fn main() {
     App::new()
@@ -53,8 +41,8 @@ fn main() {
             TimerMode::Repeating,
         )))
         .add_systems(Startup, setup)        
-        .add_plugins(CellsPlugin)
         .add_plugins(ButtonsPlugin)
+        .add_plugins(CellsPlugin)
         .run();
 }
 

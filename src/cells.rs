@@ -1,95 +1,136 @@
 use std::collections::HashMap;
 use bevy::prelude::*;
+use rand::Rng;
 
-use crate::{INITIAL_CELLS, WORLD_EDGE, IsPaused, AgeTimer, Age};
-
+use crate::{WORLD_EDGE, IsPaused, AgeTimer, Age};
 
 #[derive(Component, Debug)]
 pub struct Cell;
 
+#[derive(Resource)]
+pub struct CellMap {
+    current: HashMap<(i32, i32), bool>,
+    to_spawn: HashMap<(i32, i32), bool>,
+    to_despawn: HashMap<(i32, i32), bool>, 
+}
+
 pub struct CellsPlugin;
 
-impl Plugin for CellsPlugin {
-    fn build(&self, app: &mut App) {
-        app
-            .add_systems(Startup, setup)
-            .add_systems(Update, check_cells)
-            .add_systems(Update, draw_cursor);
-    }
-}
-
-fn setup(
-    mut commands: Commands
-) {
-    spawn_initial_cells(&mut commands);
-}
-
-fn spawn_initial_cells(
-    commands: &mut Commands,
-    // mut commands: Commands,
-) {
-    for (y, row) in INITIAL_CELLS.iter().enumerate() {
-        for (x, &cell) in row.iter().enumerate() {
-            if cell == 1 {
-                spawn_cell(commands, x as i32, y as i32);
-            }
+impl Default for CellMap {
+    fn default() -> Self {
+        CellMap {
+            current: HashMap::new(),
+            to_spawn: HashMap::new(),
+            to_despawn: HashMap::new(),
         }
     }
 }
 
-fn spawn_cell(
-    commands: &mut Commands,
-    x: i32,
-    y: i32,
-) {
-    if x.abs() > WORLD_EDGE || y.abs() > WORLD_EDGE {
-        return;
+impl Plugin for CellsPlugin {
+    fn build(&self, app: &mut App) {
+        app
+            .init_resource::<CellMap>()
+            .add_systems(Startup, setup)
+            .add_systems(Update, check_cells)
+            .add_systems(Update, draw_cursor)
+            .add_systems(Update, apply_age);
     }
-    
-    commands.spawn((
-        SpriteBundle {
-            transform: Transform::from_xyz(x as f32, y as f32, 0.),
-            ..default()
-        },
-        Cell,
-    ));
+}
+
+fn setup(
+    cell_map: ResMut<CellMap>,
+) {
+    spawn_initial_cells(cell_map);
+}
+
+fn generate_random_cells(
+    mut cell_map: ResMut<CellMap>,
+) {
+    let mut rng = rand::thread_rng();
+    for _ in 0..100000 {
+        let a = 450;
+        let x = rng.gen_range(-a..a);
+        let y = rng.gen_range(-a..a);
+        cell_map.to_spawn.insert((x, y), true);
+    }
+}
+
+fn spawn_initial_cells(
+    cell_map: ResMut<CellMap>
+) {
+    generate_random_cells(cell_map);
+}
+
+fn apply_age(
+    mut commands: Commands,
+    mut cell_map: ResMut<CellMap>,
+    query: Query<(Entity, &Transform), With<Cell>>
+) {
+
+
+    for (entity, transform) in query.iter() {
+        let x = transform.translation.x as i32;
+        let y = transform.translation.y as i32;
+        let is_existing = cell_map.current.get(&(x, y));
+        let is_dead = cell_map.to_despawn.get(&(x, y));
+        if is_dead == Some(&true) || is_existing != Some(&true) {
+            commands.entity(entity).despawn_recursive();
+            cell_map.current.remove(&(x, y));
+            cell_map.to_despawn.remove(&(x, y));
+        }
+    }
+
+    let to_spawn = cell_map.to_spawn.clone();
+    for ( key, _) in to_spawn.iter() {
+        let x = key.0;
+        let y = key.1;
+        cell_map.to_spawn.remove(&(x, y));
+        if x.abs() > WORLD_EDGE || y.abs() > WORLD_EDGE {
+            continue;
+        }
+        cell_map.current.insert((x, y), true);
+        commands.spawn((
+            SpriteBundle {
+                transform: Transform::from_xyz(x as f32, y as f32, 0.),
+                ..default()
+            },
+            Cell,
+        ));
+    }
+    cell_map.to_spawn.clear();
+    cell_map.to_despawn.clear();
 }
 
 fn check_cells(
-    mut commands: Commands,
-    query: Query<(Entity, &Transform), With<Cell>>,
     time: Res<Time>,
     mut timer: ResMut<AgeTimer>,
     is_paused: Res<IsPaused>,
-    mut age: ResMut<Age>
+    mut age: ResMut<Age>,
+    mut cell_map: ResMut<CellMap>,
 ) {
-    
+
     if is_paused.0 {
         return;
     }
 
-    if !timer.0.tick(time.delta()).finished() {
+    timer.0.tick(time.delta());
+
+
+    if !timer.0.finished() {
         return;
     }
+    
     age.0 += 1;
 
-    let cells = query.iter().map(|(_entity, transform)| {
-        let x = transform.translation.x;
-        let y = transform.translation.y;
-        (x, y)
-    });
+    let mut to_spawn: HashMap<(i32, i32), bool> = HashMap::new();
+    let mut to_despawn: HashMap<(i32, i32), bool> = HashMap::new();
 
-    let mut old_cell_map: HashMap<String, bool> = HashMap::new();
-    let mut new_cell_map: HashMap<String, bool> = HashMap::new();
+    let mut checked_cells: HashMap<(i32, i32), bool> = HashMap::new();
 
-    for (x, y) in cells {
-        old_cell_map.insert(format!("{}#{}", x, y), true);
-    }
-
-    for (key, _value) in old_cell_map.iter() {
-        let (x_str, y_str) = key.split_once("#").unwrap();
-        let x: i32 = x_str.parse().unwrap();
-        let y: i32 = y_str.parse().unwrap();
+    for (key, _) in cell_map.current.iter() {
+        
+        let x = key.0;
+        let y = key.1;
 
         let mut neighbours_count = 0;
         for i in -1..2 {
@@ -99,16 +140,23 @@ fn check_cells(
                 }
                 let x2 = x + i;
                 let y2 = y + j;
-                let is_alive = old_cell_map.get(&format!("{}#{}", x2, y2));
+                
+                let is_alive = cell_map.current.get(&(x2, y2));
                 if is_alive == Some(&true) {
                     neighbours_count += 1;
                     continue;
                 }
                 
-                let is_already_spawned = new_cell_map.get(&format!("{}#{}", x2, y2));
+                if checked_cells.get(&(x2, y2)) == Some(&true) {
+                    continue;
+                }
+
+                let is_already_spawned = cell_map.to_spawn.get(&(x2, y2));
                 if is_already_spawned == Some(&true) {
                     continue;
                 }
+
+               
 
                 let mut sub_neighbours_count = 0;
 
@@ -119,27 +167,27 @@ fn check_cells(
                         }
                         let x3 = x2 + i;
                         let y3 = y2 + j;
-                        let is_alive = old_cell_map.get(&format!("{}#{}", x3, y3));
+                     
+                        
+                        let is_alive = cell_map.current.get(&(x3, y3));
                         if is_alive == Some(&true) {
                             sub_neighbours_count += 1;
                         }
                     }
                 }
                 if sub_neighbours_count == 3 {
-                    spawn_cell(&mut commands, x2 as i32, y2 as i32);
-                    new_cell_map.insert(format!("{}#{}", x2 as i32, y2 as i32), true);
+                    to_spawn.insert((x2, y2), true);
                 }
+                checked_cells.insert((x2, y2), true);
             }
         }
 
         if neighbours_count < 2 || neighbours_count > 3 {
-            for (entity, transform) in query.iter() {
-                if transform.translation.x == x as f32 && transform.translation.y == y as f32 {
-                    commands.entity(entity).despawn_recursive();
-                }
-            }
+            to_despawn.insert((x, y), true);
         }
     }
+    cell_map.to_spawn = to_spawn;
+    cell_map.to_despawn = to_despawn;
 }
 
 fn draw_cursor(
@@ -147,7 +195,7 @@ fn draw_cursor(
     cells_query: Query<&Transform, With<Cell>>,
     windows: Query<&Window>,
     buttons: Res<Input<MouseButton>>,
-    mut commands: Commands,
+    mut cell_map: ResMut<CellMap>,
 ) {
     let (camera, camera_transform) = camera_query.single();
 
@@ -170,17 +218,16 @@ fn draw_cursor(
         }) {
             return;
         }
-        spawn_cell(&mut commands, new_x, new_y);
+    
+        cell_map.to_spawn.insert((new_x, new_y), true);
     }
 }
 
 pub fn reset_cells(
-    cells_query: &Query<Entity, With<Cell>>,
-    commands: &mut Commands,
+    mut cell_map: ResMut<CellMap>,
 ) {
-    for entity in cells_query.iter() {
-        // TODO mark cell as dead
-        commands.entity(entity).despawn_recursive();
-    }
-    spawn_initial_cells(commands);
+    cell_map.current.clear();
+    cell_map.to_despawn.clear();
+    cell_map.to_spawn.clear();
+    spawn_initial_cells(cell_map);
 }

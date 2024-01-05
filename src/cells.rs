@@ -52,7 +52,7 @@ fn generate_random_cells(
 
     const NOICE_FACTOR: f64 = 5.5;
     const NOICE_THRESHOLD: f64 = 0.2;
-    const INITIAL_WORLD_SIZE: i32 = 500;
+    const INITIAL_WORLD_SIZE: i32 = 100;
     
     let half_world_size = INITIAL_WORLD_SIZE / 2;
     for x in -half_world_size..half_world_size {

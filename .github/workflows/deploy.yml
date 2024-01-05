@@ -38,7 +38,6 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout --orphan gh-pages
-          rm -rf *
           cp -r build/* .
           git add --all
           git commit -m "Deploy to GitHub Pages"

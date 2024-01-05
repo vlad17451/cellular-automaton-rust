@@ -42,31 +42,50 @@ fn setup(
     spawn_initial_cells(cell_map);
 }
 
+ struct NoiceLayer {
+        factor: f64,
+        threshold: Range<f64>,
+    }
+
 fn generate_random_cells(
     mut cell_map: ResMut<CellMap>,
 ) {
     let mut rng = rand::thread_rng();
     let perlin = Perlin::new(rng.gen());
 
-    // const NOICE_FACTOR: f64 = 2.6;
-    // const NOICE_THRESHOLD: f64 = 0.4;
+    let noice_layers = vec![
+        NoiceLayer {
+            factor: 200.0,
+            threshold: -0.5..1.0,
 
-    // const NOICE_FACTOR: f64 = 9.6;
-    // const NOICE_THRESHOLD: f64 = 0.7;
+        },
+        NoiceLayer {
+            factor: 6.0,
+            threshold: 0.3..0.6,
+        },
+        NoiceLayer {
+            factor: 50.0,
+            threshold: -0.2..1.0,
+        },
+    ];
 
-    const NOICE_FACTOR: f64 = 30.0;
-    const NOICE_THRESHOLD: Range<f64> = 0.1..0.2;
-
-    const INITIAL_WORLD_SIZE: i32 = 1000;
+    const INITIAL_WORLD_SIZE: i32 = 800;
     
     let half_world_size = INITIAL_WORLD_SIZE / 2;
     for x in -half_world_size..half_world_size {
         for y in -half_world_size..half_world_size {
-            let noise = perlin.get([x as f64 / NOICE_FACTOR, y as f64 / NOICE_FACTOR]);
-            if noise < NOICE_THRESHOLD.start || noise > NOICE_THRESHOLD.end {
-                continue;
+
+            let mut spawn = true;
+            for noice_layer in noice_layers.iter() {
+                let factor = noice_layer.factor;
+                let threshold = &noice_layer.threshold;
+                let noise = perlin.get([x as f64 / factor, y as f64 / factor]);
+                if noise < threshold.start || noise > threshold.end {
+                    spawn = false;
+                    continue;
+                }
             }
-            cell_map.to_spawn.insert((x, y), true);
+            cell_map.to_spawn.insert((x, y), spawn);
         }   
     }
 }
@@ -93,7 +112,10 @@ fn apply_age(
     }
 
     let to_spawn = cell_map.to_spawn.clone();
-    for (key, _) in to_spawn.iter() {
+    for (key, value) in to_spawn.iter() {
+        if !value {
+            continue;
+        }
         let x = key.0;
         let y = key.1;
         cell_map.to_spawn.remove(&(x, y));

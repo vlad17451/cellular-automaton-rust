@@ -22,8 +22,7 @@ pub struct IsPaused(bool);
 
 // TODO add keyboard shortcuts
 // TODO space to move camera
-// TODO asset server
-// TODO remove `to_despawn` !!!
+// TODO asset server + loader
 
 pub const MIN_AGE_DURATION: f32 = 0.01;
 pub const MAX_AGE_DURATION: f32 = 10.;

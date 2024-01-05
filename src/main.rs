@@ -20,11 +20,10 @@ pub struct IsPaused(bool);
 // #[derive(Resource)]
 // struct StopPropagation(bool);
 
-// TODO generate by perelin noise
 // TODO add keyboard shortcuts
 // TODO space to move camera
 // TODO asset server
-// TODO remove `to_despawn`
+// TODO remove `to_despawn` !!!
 
 pub const MIN_AGE_DURATION: f32 = 0.01;
 pub const MAX_AGE_DURATION: f32 = 10.;

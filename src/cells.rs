@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use bevy::prelude::*;
 use rand::Rng;
+use noise::{NoiseFn, Perlin};
 
 use crate::{WORLD_EDGE, IsPaused, AgeTimer, Age};
 
@@ -47,11 +48,22 @@ fn generate_random_cells(
     mut cell_map: ResMut<CellMap>,
 ) {
     let mut rng = rand::thread_rng();
-    for _ in 0..100000 {
-        let a = 450;
-        let x = rng.gen_range(-a..a);
-        let y = rng.gen_range(-a..a);
-        cell_map.to_spawn.insert((x, y), true);
+    let perlin = Perlin::new(rng.gen());
+
+    const NOICE_FACTOR: f64 = 5.5;
+    const NOICE_THRESHOLD: f64 = 0.2;
+    const INITIAL_WORLD_SIZE: i32 = 1700;
+    
+    let half_world_size = INITIAL_WORLD_SIZE / 2;
+    for x in -half_world_size..half_world_size {
+        for y in -half_world_size..half_world_size {
+            let noise = perlin.get([x as f64 / NOICE_FACTOR, y as f64 / NOICE_FACTOR]);
+            // print!("{} \n", noise);
+            if noise < NOICE_THRESHOLD {
+                continue;
+            }
+            cell_map.to_spawn.insert((x, y), true);
+        }   
     }
 }
 

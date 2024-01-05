@@ -17,6 +17,7 @@ jobs:
         with:
           toolchain: stable
           override: true
+          target: wasm32-unknown-unknown
 
       - name: Setup Node.js
         uses: actions/setup-node@v2

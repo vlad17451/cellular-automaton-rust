@@ -4,8 +4,8 @@
   "scripts": {
     "cargo-build": "cargo build --features prod --release --target wasm32-unknown-unknown",
     "wasm-bindgen": "wasm-bindgen --no-typescript --target web --out-dir ./build/ --out-name \"cellular-automaton-rust\" ./target/wasm32-unknown-unknown/release/cellular-automaton-rust.wasm",
-    "build-html": "cp ./assets/index.html ./build/index.html",  
-    "build-assets": "cp -r ./assets ./build/assets",
+    "build-html": "cp ./public/index.html ./build/index.html",  
+    "build-assets": "cp -r ./assets ./build",
     "build": "npm run cargo-build && npm run wasm-bindgen && npm run build-html && npm run build-assets",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build"

@@ -34,6 +34,7 @@ jobs:
         run: npm run build
 
       - name: Deploy to GitHub Pages manually
+        shell: bash
         env:
           PAT: ${{ secrets.PAT }}
         run: |

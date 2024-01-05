@@ -2,7 +2,8 @@ name: Build and Deploy
 on:
   push:
     branches:
-      - master  # replace with your default branch if not 'main'
+      - master
+      - gh-pages
 
 jobs:
   build-and-deploy:

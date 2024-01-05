@@ -55,37 +55,45 @@ fn generate_random_cells(
 
     let noice_layers = vec![
         NoiceLayer {
-            factor: 200.0,
+            factor: 250.0,
             threshold: -0.5..1.0,
-
         },
         NoiceLayer {
             factor: 6.0,
-            threshold: 0.3..0.6,
+            threshold: 0.3..0.7,
         },
         NoiceLayer {
-            factor: 50.0,
-            threshold: -0.2..1.0,
+            factor: 30.0,
+            threshold: -0.3..0.8,
         },
     ];
 
-    const INITIAL_WORLD_SIZE: i32 = 800;
+    const INITIAL_WORLD_SIZE: i32 = 600;
     
     let half_world_size = INITIAL_WORLD_SIZE / 2;
     for x in -half_world_size..half_world_size {
         for y in -half_world_size..half_world_size {
 
-            let mut spawn = true;
+            let mut spawn_flag = true;
             for noice_layer in noice_layers.iter() {
+    
+                let distance_from_center = ((x * x + y * y) as f64).sqrt();
+                let max_distance = half_world_size as f64;
+          
+                let circle_factor = 1. - (distance_from_center / max_distance as f64) * 0.75;
+           
+                let outside_circle = distance_from_center > max_distance;
+
                 let factor = noice_layer.factor;
                 let threshold = &noice_layer.threshold;
-                let noise = perlin.get([x as f64 / factor, y as f64 / factor]);
-                if noise < threshold.start || noise > threshold.end {
-                    spawn = false;
+                let noise = perlin.get([x as f64 / factor, y as f64 / factor]) * circle_factor;
+                let passed_threshold = noise > threshold.start && noise < threshold.end;
+                if !passed_threshold || outside_circle {
+                    spawn_flag = false;
                     continue;
                 }
             }
-            cell_map.to_spawn.insert((x, y), spawn);
+            cell_map.to_spawn.insert((x, y), spawn_flag);
         }   
     }
 }

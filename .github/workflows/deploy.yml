@@ -19,6 +19,9 @@ jobs:
           override: true
           target: wasm32-unknown-unknown
 
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli
+        
       - name: Setup Node.js
         uses: actions/setup-node@v2
         with:

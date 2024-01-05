@@ -3,7 +3,7 @@ cargo build --features dev
 ```
 
 ```
-npm run build
+bash build.sh
 ```
 
 

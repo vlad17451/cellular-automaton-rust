@@ -4,6 +4,6 @@ wasm-bindgen --no-typescript --target web --out-dir ./build/ --out-name "cellula
 
 mkdir -p ./build
 
-cp ./public/index.html ./build/index.html
+cp ./front/index.html ./build/index.html
 
 cp -r ./assets ./build

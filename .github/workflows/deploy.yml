@@ -36,11 +36,10 @@ jobs:
       - name: Deploy to GitHub Pages manually
         run: |
           git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout --orphan gh-pages
-          git rm -rf .  # remove all files
-          rm -rf target
-          cp -r build/* .  # copy all files from build directory to current directory
-          git add -A
+          rm -rf *
+          cp -r build/* .
+          git add --all
           git commit -m "Deploy to GitHub Pages"
-          git push -f origin gh-pages
+          git push --force https://${{ secrets.GITHUB_TOKEN }}@github.com/vlad17451/cellular-automaton-rust.git gh-pages

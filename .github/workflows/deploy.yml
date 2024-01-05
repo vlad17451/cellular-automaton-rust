@@ -1,0 +1,46 @@
+name: Build and Deploy
+on:
+  push:
+    branches:
+      - master
+      - gh-pages
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          target: wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'  # or any other version you prefer
+  
+
+      - name: Build rust
+        run: cargo update
+
+      - name: Build npm
+        run: npm run build
+
+      - name: Deploy to GitHub Pages manually
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout --orphan gh-pages
+          git rm -rf .  # remove all files
+          cp -r build/* .  # copy all files from build directory to current directory
+          git add -A
+          git commit -m "Deploy to GitHub Pages"
+          git push -f origin gh-pages

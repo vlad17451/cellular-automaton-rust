@@ -1,5 +1,5 @@
 ```
-cargo build --features dev
+cargo run
 ```
 
 ```

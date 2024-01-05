@@ -50,9 +50,9 @@ fn generate_random_cells(
     let mut rng = rand::thread_rng();
     let perlin = Perlin::new(rng.gen());
 
-    const NOICE_FACTOR: f64 = 5.5;
+    const NOICE_FACTOR: f64 = 3.0;
     const NOICE_THRESHOLD: f64 = 0.2;
-    const INITIAL_WORLD_SIZE: i32 = 100;
+    const INITIAL_WORLD_SIZE: i32 = 600;
     
     let half_world_size = INITIAL_WORLD_SIZE / 2;
     for x in -half_world_size..half_world_size {

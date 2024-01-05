@@ -11,7 +11,6 @@ bevy_pancam = "0.10.0"
 noise = "0.8.2"
 rand = "0.8.5"
 
-
 # Enable a small amount of optimization in debug mode
 [profile.dev]
 opt-level = 1
@@ -24,6 +23,6 @@ opt-level = 3
 runner = "wasm-server-runner"
 
 [features]
-default = ["bevy"]
+default = ["bevy", "dev"]
 dev = ["bevy/dynamic_linking"]
 prod = ["bevy"]

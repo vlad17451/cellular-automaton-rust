@@ -36,10 +36,10 @@ jobs:
       - name: Deploy to GitHub Pages manually
         run: |
           git config --global user.name 'github-actions[bot]'
-          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git checkout --orphan gh-pages
 
-          find . -mindepth 1 ! -regex '^./build\(/.*\)?' -delete # remove all files except build folder
+          find . -mindepth 1 ! -regex '^./build\(/.*\)?' ! -regex '^./.git\(/.*\)?' -delete # remove all files except build and .git folders
 
           cp -r build/* .
           git add --all

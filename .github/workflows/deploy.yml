@@ -34,6 +34,8 @@ jobs:
         run: npm run build
 
       - name: Deploy to GitHub Pages manually
+        env:
+          PAT: ${{ secrets.PAT }}
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -42,4 +44,4 @@ jobs:
           cp -r build/* .
           git add --all
           git commit -m "Deploy to GitHub Pages"
-          git push --force https://${{ secrets.PAT }}@github.com/vlad17451/cellular-automaton-rust.git gh-pages
+          git push --force https://$PAT@github.com/vlad17451/cellular-automaton-rust.git gh-pages

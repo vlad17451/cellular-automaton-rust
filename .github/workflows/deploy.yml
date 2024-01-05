@@ -21,17 +21,8 @@ jobs:
       - name: Install wasm-bindgen-cli
         run: cargo install wasm-bindgen-cli
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '14'  # or any other version you prefer
-  
-
-      - name: Build rust
-        run: cargo update
-
-      - name: Build npm
-        run: npm run build
+      - name: Build
+        run: bash build.sh
 
       - name: Deploy to GitHub Pages manually
         run: |

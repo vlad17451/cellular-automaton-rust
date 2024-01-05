@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Range};
 use bevy::prelude::*;
 use rand::Rng;
 use noise::{NoiseFn, Perlin};
@@ -12,7 +12,6 @@ pub struct Cell;
 pub struct CellMap {
     current: HashMap<(i32, i32), bool>,
     to_spawn: HashMap<(i32, i32), bool>,
-    to_despawn: HashMap<(i32, i32), bool>, 
 }
 
 pub struct CellsPlugin;
@@ -22,7 +21,6 @@ impl Default for CellMap {
         CellMap {
             current: HashMap::new(),
             to_spawn: HashMap::new(),
-            to_despawn: HashMap::new(),
         }
     }
 }
@@ -50,16 +48,22 @@ fn generate_random_cells(
     let mut rng = rand::thread_rng();
     let perlin = Perlin::new(rng.gen());
 
-    const NOICE_FACTOR: f64 = 3.0;
-    const NOICE_THRESHOLD: f64 = 0.2;
-    const INITIAL_WORLD_SIZE: i32 = 600;
+    // const NOICE_FACTOR: f64 = 2.6;
+    // const NOICE_THRESHOLD: f64 = 0.4;
+
+    // const NOICE_FACTOR: f64 = 9.6;
+    // const NOICE_THRESHOLD: f64 = 0.7;
+
+    const NOICE_FACTOR: f64 = 30.0;
+    const NOICE_THRESHOLD: Range<f64> = 0.1..0.2;
+
+    const INITIAL_WORLD_SIZE: i32 = 1000;
     
     let half_world_size = INITIAL_WORLD_SIZE / 2;
     for x in -half_world_size..half_world_size {
         for y in -half_world_size..half_world_size {
             let noise = perlin.get([x as f64 / NOICE_FACTOR, y as f64 / NOICE_FACTOR]);
-            // print!("{} \n", noise);
-            if noise < NOICE_THRESHOLD {
+            if noise < NOICE_THRESHOLD.start || noise > NOICE_THRESHOLD.end {
                 continue;
             }
             cell_map.to_spawn.insert((x, y), true);
@@ -76,27 +80,26 @@ fn spawn_initial_cells(
 fn apply_age(
     mut commands: Commands,
     mut cell_map: ResMut<CellMap>,
-    query: Query<(Entity, &Transform), With<Cell>>
+    query: Query<(Entity, &Transform), With<Cell>>,
 ) {
-
 
     for (entity, transform) in query.iter() {
         let x = transform.translation.x as i32;
         let y = transform.translation.y as i32;
         let is_existing = cell_map.current.get(&(x, y));
-        let is_dead = cell_map.to_despawn.get(&(x, y));
-        if is_dead == Some(&true) || is_existing != Some(&true) {
+        if is_existing != Some(&true) {
             commands.entity(entity).despawn_recursive();
-            cell_map.current.remove(&(x, y));
-            cell_map.to_despawn.remove(&(x, y));
         }
     }
 
     let to_spawn = cell_map.to_spawn.clone();
-    for ( key, _) in to_spawn.iter() {
+    for (key, _) in to_spawn.iter() {
         let x = key.0;
         let y = key.1;
         cell_map.to_spawn.remove(&(x, y));
+        if cell_map.current.get(&(x, y)) == Some(&true) {
+            continue;
+        }
         if x.abs() > WORLD_EDGE || y.abs() > WORLD_EDGE {
             continue;
         }
@@ -110,7 +113,6 @@ fn apply_age(
         ));
     }
     cell_map.to_spawn.clear();
-    cell_map.to_despawn.clear();
 }
 
 fn check_cells(
@@ -133,13 +135,12 @@ fn check_cells(
     }
     
     age.0 += 1;
-
-    let mut to_spawn: HashMap<(i32, i32), bool> = HashMap::new();
-    let mut to_despawn: HashMap<(i32, i32), bool> = HashMap::new();
+    
+    let old_cells = cell_map.current.clone();
 
     let mut checked_cells: HashMap<(i32, i32), bool> = HashMap::new();
 
-    for (key, _) in cell_map.current.iter() {
+    for (key, _) in old_cells.iter() {
         
         let x = key.0;
         let y = key.1;
@@ -153,13 +154,14 @@ fn check_cells(
                 let x2 = x + i;
                 let y2 = y + j;
                 
-                let is_alive = cell_map.current.get(&(x2, y2));
+                let is_alive = old_cells.get(&(x2, y2));
                 if is_alive == Some(&true) {
                     neighbours_count += 1;
                     continue;
                 }
                 
-                if checked_cells.get(&(x2, y2)) == Some(&true) {
+                let is_already_checked = checked_cells.get(&(x2, y2));
+                if is_already_checked == Some(&true) {
                     continue;
                 }
 
@@ -167,8 +169,6 @@ fn check_cells(
                 if is_already_spawned == Some(&true) {
                     continue;
                 }
-
-               
 
                 let mut sub_neighbours_count = 0;
 
@@ -179,32 +179,30 @@ fn check_cells(
                         }
                         let x3 = x2 + i;
                         let y3 = y2 + j;
-                     
                         
-                        let is_alive = cell_map.current.get(&(x3, y3));
+                        let is_alive = old_cells.get(&(x3, y3));
                         if is_alive == Some(&true) {
                             sub_neighbours_count += 1;
                         }
                     }
                 }
+
                 if sub_neighbours_count == 3 {
-                    to_spawn.insert((x2, y2), true);
+                    cell_map.to_spawn.insert((x2, y2), true);
                 }
+
                 checked_cells.insert((x2, y2), true);
             }
         }
 
         if neighbours_count < 2 || neighbours_count > 3 {
-            to_despawn.insert((x, y), true);
+            cell_map.current.remove(&(x, y));
         }
     }
-    cell_map.to_spawn = to_spawn;
-    cell_map.to_despawn = to_despawn;
 }
 
 fn draw_cursor(
     camera_query: Query<(&Camera, &GlobalTransform)>,
-    cells_query: Query<&Transform, With<Cell>>,
     windows: Query<&Window>,
     buttons: Res<Input<MouseButton>>,
     mut cell_map: ResMut<CellMap>,
@@ -220,18 +218,10 @@ fn draw_cursor(
     };
 
     if buttons.pressed(MouseButton::Left) {
-        let new_x = (point.x - 0.5).ceil() as i32;
-        let new_y = (point.y - 0.5).ceil() as i32;
-
-        if cells_query.iter().any(|transform| {
-            let x = transform.translation.x as i32;
-            let y = transform.translation.y as i32;
-            x == new_x && y == new_y
-        }) {
-            return;
-        }
+        let x = (point.x - 0.5).ceil() as i32;
+        let y = (point.y - 0.5).ceil() as i32;
+        cell_map.to_spawn.insert((x, y), true);
     
-        cell_map.to_spawn.insert((new_x, new_y), true);
     }
 }
 
@@ -239,7 +229,6 @@ pub fn reset_cells(
     mut cell_map: ResMut<CellMap>,
 ) {
     cell_map.current.clear();
-    cell_map.to_despawn.clear();
     cell_map.to_spawn.clear();
     spawn_initial_cells(cell_map);
 }
